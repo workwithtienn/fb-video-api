@@ -1,20 +1,9 @@
 [build]
-  command = "npm run build"
-  functions = "netlify/functions"
   publish = "."
+  functions = "netlify/functions"
 
 [[redirects]]
   from = "/api"
-  to = "/.netlify/functions/index"
+  to = "/.netlify/functions/api"
   status = 200
   force = true
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/index"
-  status = 200
-  force = true
-
-[functions]
-  node_bundler = "esbuild"
-  external_node_modules = ["yt-dlp-wrap"]
