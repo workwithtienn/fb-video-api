@@ -1,16 +1,13 @@
 {
-  "name": "fb-video-api",
-  "version": "3.0.0",
+  "name": "fb-downloader",
+  "version": "3.0",
   "scripts": {
     "build": "tsc"
   },
   "dependencies": {
-    "yt-dlp-wrap": "^2.3.6",
-    "escape-html": "^1.0.3"
+    "yt-dlp-wrap": "^2.3.6"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/escape-html": "^1.0.4",
     "typescript": "^5"
   }
 }
