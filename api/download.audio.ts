@@ -1,30 +1,44 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import YTDlpWrap from 'yt-dlp-wrap';
 import escape from 'escape-html';
 
 const ytDlp = new YTDlpWrap();
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { url } = req.query;
-  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
+export default async function handler(req: any, res: any) {
+  const url = req.query.url as string;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
-    const info = await ytDlp.execPromise([url, '-j']);
-    const metadata = JSON.parse(info);
-    const title = (metadata.title || 'audio').replace(/[^\w\-_. ]/g, '_').substring(0, 100) + '.m4a';
+    const info = await ytDlp.execPromise([url, '-f', 'bestaudio/best', '--print', 'url']);
+    const directUrl = info.trim();
+    if (!directUrl) throw new Error('No audio URL');
 
-    const audioUrl = metadata.formats?.find((f: any) => f.acodec !== 'none' && f.vcodec === 'none')?.url || metadata.url;
-    if (!audioUrl) throw new Error('No audio URL found');
+    const meta = await ytDlp.execPromise([url, '--print', 'title']);
+    let title = (meta.trim() || 'audio').replace(/[^\w\-_. ]/g, '_').substring(0, 100);
+    title = escape(title) + '.m4a';
 
-    res.setHeader('Content-Disposition', `attachment; filename="${escape(title)}"`);
+    const response = await fetch(directUrl);
+    if (!response.ok || !response.body) throw new Error('Failed to fetch audio');
+
+    res.setHeader('Content-Disposition', `attachment; filename="${title}"`);
     res.setHeader('Content-Type', 'audio/m4a');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
-    const response = await fetch(audioUrl);
-    if (!response.body) throw new Error('No body');
-    response.body.pipe(res);
+    const reader = response.body.getReader();
+    const stream = new ReadableStream({
+      async start(controller) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+        controller.close();
+      }
+    });
+
+    return new Response(stream, {
+      headers: res.getHeaders()
+    }).pipeTo(res.req.socket);
   } catch (e: any) {
-    res.status(400).json({ error: e.message || 'Failed to process audio' });
+    res.status(400).json({ error: e.message });
   }
 }
