@@ -1,15 +1,13 @@
 from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
 import re
-import httpx
-from urllib.parse import urlparse, parse_qs
 
 app = FastAPI(
     title="Social Media Downloader API",
     description="Tải video/audio từ Facebook, YouTube, TikTok",
-    version="3.1"
+    version="3.2"
 )
 
 app.add_middleware(
@@ -18,7 +16,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],
+    expose_headers=["Content-Disposition", "Location"],
 )
 
 def get_media_info(url: str, audio_only: bool = False):
@@ -26,8 +24,9 @@ def get_media_info(url: str, audio_only: bool = False):
     base_opts = {
         'quiet': True,
         'no_warnings': True,
-        'socket_timeout': 30,
-        'retries': 3,
+        'socket_timeout': 15,
+        'retries': 2,
+        'no_check_certificate': True,
     }
     
     if audio_only:
@@ -36,10 +35,9 @@ def get_media_info(url: str, audio_only: bool = False):
             'format': 'bestaudio/best',
         }
     else:
-        # Ưu tiên format có cả video+audio, fallback về best
         ydl_opts = {
             **base_opts,
-            'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+            'format': 'best[ext=mp4]/best',
         }
     
     try:
@@ -49,19 +47,24 @@ def get_media_info(url: str, audio_only: bool = False):
             # Lấy URL trực tiếp
             direct_url = info.get('url')
             
-            # Nếu không có URL, thử lấy từ formats
+            # Fallback: tìm trong formats
             if not direct_url and 'formats' in info:
-                formats = info['formats']
+                formats = [f for f in info['formats'] if f.get('url')]
                 if formats:
-                    # Lấy format cuối cùng (thường là best)
-                    direct_url = formats[-1].get('url')
+                    direct_url = formats[-1]['url']
+            
+            # Fallback: requested_formats (cho video+audio merge)
+            if not direct_url and 'requested_formats' in info:
+                requested = info['requested_formats']
+                if requested and len(requested) > 0:
+                    direct_url = requested[0].get('url')
             
             if not direct_url:
-                raise HTTPException(status_code=400, detail="Không thể lấy URL download")
+                raise HTTPException(status_code=400, detail="Không tìm thấy URL download")
             
             # Làm sạch title
             title = info.get('title', 'video')
-            safe_title = re.sub(r'[^\w\-_\. ]', '_', title)[:100]
+            safe_title = re.sub(r'[^\w\-_\. ]', '_', title)[:80]
             
             # Xác định extension
             ext = info.get('ext', 'mp4' if not audio_only else 'm4a')
@@ -72,91 +75,145 @@ def get_media_info(url: str, audio_only: bool = False):
                 'ext': ext
             }
             
+    except yt_dlp.utils.DownloadError as e:
+        raise HTTPException(status_code=400, detail=f"Không thể tải: {str(e)}")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Lỗi xử lý: {str(e)}")
-
-async def stream_file(url: str, filename: str):
-    """Stream file từ URL với chunks"""
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-            async with client.stream('GET', url) as response:
-                response.raise_for_status()
-                async for chunk in response.aiter_bytes(chunk_size=8192):
-                    yield chunk
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi tải file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Lỗi: {str(e)}")
 
 @app.get("/")
 def root():
     return {
         "status": "ok",
-        "message": "Social Media Downloader API - Hỗ trợ: Facebook, YouTube, TikTok",
-        "endpoints": {
-            "video": "/download/video?url=<VIDEO_URL>",
-            "audio": "/download/audio?url=<VIDEO_URL>",
-            "api_video": "/api/video?url=<VIDEO_URL>",
-            "api_audio": "/api/audio?url=<VIDEO_URL>"
+        "message": "Social Media Downloader API",
+        "usage": {
+            "download_video": "/download/video?url=YOUR_VIDEO_URL",
+            "download_audio": "/download/audio?url=YOUR_VIDEO_URL",
+            "get_info": "/api/video?url=YOUR_VIDEO_URL"
         },
         "docs": "/docs"
     }
 
 @app.get("/download/video")
-async def download_video(url: str = Query(..., description="Link video từ Facebook/YouTube/TikTok")):
-    """Tải video trực tiếp - tự động download"""
+def download_video(url: str = Query(..., description="Link video")):
+    """Tải video - redirect với download header"""
     media_info = get_media_info(url, audio_only=False)
     
     filename = f"{media_info['title']}.{media_info['ext']}"
+    download_url = media_info['url']
     
-    return StreamingResponse(
-        stream_file(media_info['url'], filename),
-        media_type="video/mp4",
+    # Trả về HTML tự động trigger download
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Đang tải xuống...</title>
+        <script>
+            window.location.href = "{download_url}";
+        </script>
+    </head>
+    <body>
+        <h2>Đang chuyển hướng đến file tải xuống...</h2>
+        <p>Nếu không tự động tải, <a href="{download_url}" download="{filename}">click vào đây</a></p>
+    </body>
+    </html>
+    """
+    
+    return Response(
+        content=html_content,
+        media_type="text/html",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "Cache-Control": "no-cache"
+            "Refresh": f'0; url={download_url}'
         }
     )
 
 @app.get("/download/audio")
-async def download_audio(url: str = Query(..., description="Link video từ Facebook/YouTube/TikTok")):
-    """Tải audio trực tiếp - tự động download"""
+def download_audio(url: str = Query(..., description="Link video")):
+    """Tải audio - redirect với download header"""
     media_info = get_media_info(url, audio_only=True)
     
     filename = f"{media_info['title']}.{media_info['ext']}"
+    download_url = media_info['url']
     
-    return StreamingResponse(
-        stream_file(media_info['url'], filename),
-        media_type="audio/mp4",
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Đang tải xuống...</title>
+        <script>
+            window.location.href = "{download_url}";
+        </script>
+    </head>
+    <body>
+        <h2>Đang chuyển hướng đến file tải xuống...</h2>
+        <p>Nếu không tự động tải, <a href="{download_url}" download="{filename}">click vào đây</a></p>
+    </body>
+    </html>
+    """
+    
+    return Response(
+        content=html_content,
+        media_type="text/html",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "Cache-Control": "no-cache"
+            "Refresh": f'0; url={download_url}'
         }
     )
 
 @app.get("/api/video")
-async def api_video(url: str = Query(...)):
+def api_video(url: str = Query(...)):
     """API trả về thông tin video"""
-    media_info = get_media_info(url, audio_only=False)
-    
-    return {
-        "success": True,
-        "title": media_info['title'],
-        "download_url": media_info['url'],
-        "ext": media_info['ext']
-    }
+    try:
+        media_info = get_media_info(url, audio_only=False)
+        return {
+            "success": True,
+            "title": media_info['title'],
+            "download_url": media_info['url'],
+            "ext": media_info['ext']
+        }
+    except HTTPException as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"success": False, "error": e.detail}
+        )
 
 @app.get("/api/audio")
-async def api_audio(url: str = Query(...)):
+def api_audio(url: str = Query(...)):
     """API trả về thông tin audio"""
-    media_info = get_media_info(url, audio_only=True)
-    
-    return {
-        "success": True,
-        "title": media_info['title'],
-        "download_url": media_info['url'],
-        "ext": media_info['ext']
-    }
+    try:
+        media_info = get_media_info(url, audio_only=True)
+        return {
+            "success": True,
+            "title": media_info['title'],
+            "download_url": media_info['url'],
+            "ext": media_info['ext']
+        }
+    except HTTPException as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"success": False, "error": e.detail}
+        )
 
-# Health check endpoint
+@app.get("/direct/video")
+def direct_video(url: str = Query(...)):
+    """Redirect trực tiếp đến video"""
+    media_info = get_media_info(url, audio_only=False)
+    return Response(
+        status_code=302,
+        headers={"Location": media_info['url']}
+    )
+
+@app.get("/direct/audio")
+def direct_audio(url: str = Query(...)):
+    """Redirect trực tiếp đến audio"""
+    media_info = get_media_info(url, audio_only=True)
+    return Response(
+        status_code=302,
+        headers={"Location": media_info['url']}
+    )
+
 @app.get("/health")
 def health():
-    return {"status": "healthy", "service": "media-downloader"}
+    return {"status": "healthy"}
