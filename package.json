@@ -1,0 +1,21 @@
+{
+  "name": "fb-video-downloader",
+  "version": "5.0.0",
+  "description": "Social Media Video Downloader API with Node.js",
+  "main": "api/index.ts",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.14.4",
+    "@vercel/node": "^3.2.21"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.3",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
