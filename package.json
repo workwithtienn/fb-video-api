@@ -1,11 +1,8 @@
 {
-  "name": "fb-downloader",
+  "name": "netlify-fb-downloader-2025",
   "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "build": "echo 'Done'"
-  },
   "dependencies": {
-    "yt-dlp-wrap": "^2.3.6"
+    "axios": "^1.7.0",
+    "cheerio": "^1.0.0-rc.12"
   }
 }
