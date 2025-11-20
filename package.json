@@ -3,13 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-  "build": "echo 'No build required'"
-},
+    "build": "echo 'No build step needed'"
+  },
   "dependencies": {
     "yt-dlp-wrap": "^2.3.6"
-  },
-  "devDependencies": {
-    "@types/node": "^20",
-    "typescript": "^5"
   }
 }
