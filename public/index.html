@@ -13,109 +13,100 @@
 <body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
     <div class="bg-white shadow-xl rounded-lg p-6 w-full max-w-md">
-        <h1 class="text-2xl font-bold text-blue-600 mb-4 text-center">Facebook Reel Downloader</h1>
+        <h1 class="text-2xl font-bold text-blue-600 mb-2 text-center">Facebook Downloader</h1>
+        <p class="text-xs text-center text-gray-400 mb-6">Hỗ trợ Video & Audio (Giả lập) tốt nhất 2025</p>
         
         <div class="mb-4">
-            <label class="block text-gray-700 text-sm font-bold mb-2">Nhập Link Video/Reel:</label>
-            <input type="text" id="videoLink" placeholder="https://www.facebook.com/reel/..." class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <label class="block text-gray-700 text-sm font-bold mb-2">Dán Link Video/Reel:</label>
+            <input type="text" id="videoLink" placeholder="Ví dụ: https://www.facebook.com/reel/..." class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
 
-        <div class="mb-4">
-            <label class="block text-gray-700 text-sm font-bold mb-2">Tùy chọn tải:</label>
-            <select id="downloadType" class="w-full px-3 py-2 border rounded-lg bg-white">
-                <option value="video">Download Video (MP4)</option>
-                <option value="audio">Download Audio Only (M4A/MP3)</option>
-            </select>
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2">Chọn định dạng:</label>
+            <div class="flex gap-2">
+                <button id="optVideo" onclick="selectType('video')" class="flex-1 py-2 px-4 rounded border border-blue-500 bg-blue-500 text-white font-bold transition">
+                    VIDEO (MP4)
+                </button>
+                <button id="optAudio" onclick="selectType('audio')" class="flex-1 py-2 px-4 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition">
+                    AUDIO (M4A)
+                </button>
+            </div>
         </div>
 
-        <button onclick="processDownload()" id="btnDownload" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition duration-300 flex justify-center items-center gap-2">
-            <span>Tải Ngay</span>
+        <button onclick="processDownload()" id="btnDownload" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 rounded-lg transition duration-300 flex justify-center items-center gap-2 shadow-lg">
+            <span>BẮT ĐẦU TẢI</span>
         </button>
 
         <div class="mt-6">
-            <h3 class="text-sm font-bold text-gray-500 mb-2">Logs / Trạng thái:</h3>
-            <div id="logArea" class="bg-gray-900 text-green-400 text-xs p-3 rounded h-40 overflow-y-auto font-mono">
-                <p>[System] Sẵn sàng...</p>
+            <div id="logArea" class="bg-black text-green-400 text-xs p-3 rounded h-32 overflow-y-auto font-mono border border-gray-700">
+                <p class="opacity-50">> System ready...</p>
             </div>
         </div>
     </div>
 
     <script>
+        let selectedType = 'video';
         const logArea = document.getElementById('logArea');
         const btn = document.getElementById('btnDownload');
 
-        function addLog(msg, type = 'info') {
+        function selectType(type) {
+            selectedType = type;
+            document.getElementById('optVideo').className = type === 'video' ? 'flex-1 py-2 px-4 rounded border border-blue-500 bg-blue-500 text-white font-bold transition' : 'flex-1 py-2 px-4 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition';
+            document.getElementById('optAudio').className = type === 'audio' ? 'flex-1 py-2 px-4 rounded border border-purple-500 bg-purple-500 text-white font-bold transition' : 'flex-1 py-2 px-4 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition';
+            addLog(`> Đã chọn chế độ: ${type.toUpperCase()}`);
+        }
+
+        function addLog(msg, color = 'text-green-400') {
             const p = document.createElement('p');
-            const time = new Date().toLocaleTimeString();
-            p.innerText = `[${time}] ${msg}`;
-            if (type === 'error') p.style.color = '#ff5555';
-            if (type === 'success') p.style.color = '#50fa7b';
+            p.innerText = msg;
+            p.className = color + ' mb-1';
             logArea.appendChild(p);
             logArea.scrollTop = logArea.scrollHeight;
         }
 
         async function processDownload() {
             const url = document.getElementById('videoLink').value.trim();
-            const type = document.getElementById('downloadType').value;
-
-            if (!url) {
-                addLog("Lỗi: Chưa nhập đường dẫn!", 'error');
-                return;
-            }
+            if (!url) return addLog("> Lỗi: Vui lòng nhập link!", 'text-red-400');
 
             btn.disabled = true;
             btn.innerHTML = '<div class="loader"></div> Đang xử lý...';
-            addLog(`Đang kết nối máy chủ... Mode: ${type}`);
+            addLog("> Đang kết nối server Netlify...");
 
             try {
-                addLog("Đang gửi request tới Netlify Function...");
-                
-                const response = await fetch('/api/fb-downloader', {
+                // Bước 1: Lấy Link Gốc
+                const res = await fetch('/api/fb-downloader', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, type })
+                    body: JSON.stringify({ url })
                 });
 
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.error || 'Lỗi không xác định từ server');
-                }
+                if (!res.ok) throw new Error((await res.json()).error);
+                
+                const data = await res.json();
+                const finalLink = data.downloadUrl;
+                addLog("> Đã lấy được link gốc từ Facebook!");
 
-                const data = await response.json();
-                addLog(data.message, 'success');
-                addLog(`Đã tìm thấy nguồn media. Đang chuẩn bị tải xuống...`);
+                // Bước 2: Gọi Proxy để ép tải về
+                addLog(`> Đang tải xuống dưới dạng ${selectedType.toUpperCase()}...`);
+                addLog("> (Nếu file lớn > 5MB, sẽ mở tab mới)");
 
-                downloadFile(data.downloadUrl, type);
+                // Tạo link Proxy qua server của mình
+                const proxyUrl = `/api/fb-downloader?url=${encodeURIComponent(finalLink)}&type=${selectedType}`;
+                
+                // Kích hoạt tải
+                window.location.href = proxyUrl;
+
+                setTimeout(() => {
+                    addLog("> Hoàn tất yêu cầu.", 'text-blue-400');
+                    btn.disabled = false;
+                    btn.innerText = 'BẮT ĐẦU TẢI LẠI';
+                }, 2000);
 
             } catch (error) {
-                addLog(`Lỗi: ${error.message}`, 'error');
-            } finally {
+                addLog(`> Lỗi: ${error.message}`, 'text-red-500');
                 btn.disabled = false;
-                btn.innerText = 'Tải Ngay';
+                btn.innerText = 'THỬ LẠI';
             }
-        }
-
-        function downloadFile(url, type) {
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            
-            // Mẹo: FB thường trả về MP4 chứa cả tiếng.
-            // Nếu chọn Audio, ta vẫn tải file đó nhưng trình duyệt sẽ lưu với tên audio
-            const extension = type === 'audio' ? 'm4a' : 'mp4';
-            const filename = `fb_download_${Date.now()}.${extension}`;
-            
-            a.download = filename;
-            a.target = '_blank'; // Mở tab mới để kích hoạt tải nếu trình duyệt chặn
-            document.body.appendChild(a);
-            a.click();
-            
-            addLog(`Đã mở yêu cầu tải file: ${filename}`, 'success');
-            
-            setTimeout(() => {
-                document.body.removeChild(a);
-                addLog("Hoàn tất quy trình.", 'info');
-            }, 1000);
         }
     </script>
 </body>
