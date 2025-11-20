@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import ytdl from '@distube/ytdl-core';
-import { pipeline } from 'stream/promises';
+const ytdl = require('@distube/ytdl-core');
+const { pipeline } = require('stream/promises');
 
 // Cấu hình CORS
 const setCORS = (res: VercelResponse) => {
