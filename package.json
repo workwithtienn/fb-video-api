@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
   "build": "echo 'No build required'"
-}
+},
   "dependencies": {
     "yt-dlp-wrap": "^2.3.6"
   },
