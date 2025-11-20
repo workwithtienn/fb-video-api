@@ -9,6 +9,7 @@
     "yt-dlp-wrap": "^2.3.6"
   },
   "devDependencies": {
-    "@types/node": "^20"
+    "@types/node": "^20",
+    "typescript": "^5"
   }
 }
