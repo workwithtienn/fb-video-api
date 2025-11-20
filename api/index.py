@@ -27,7 +27,13 @@ def get_media_info(url: str, audio_only: bool = False):
         'quiet': True,
         'no_warnings': True,
         'socket_timeout': 30,
-        'retries': 3,
+        'retries': 5,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        }
     }
 
     if audio_only:
@@ -38,16 +44,29 @@ def get_media_info(url: str, audio_only: bool = False):
     else:
         ydl_opts = {
             **base_opts,
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'best[ext=mp4]/best',
         }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
-            direct_url = info.get('url')
+            
+            # Lấy URL tùy theo format
+            if 'url' in info:
+                direct_url = info['url']
+            elif 'entries' in info and info['entries']:
+                direct_url = info['entries'][0].get('url')
+            elif 'formats' in info and info['formats']:
+                # Lấy format tốt nhất
+                best_format = info['formats'][-1]
+                direct_url = best_format.get('url')
+            else:
+                direct_url = None
+                
             title = info.get('title', 'media_file')
             safe_title = re.sub(r'[^\w\-_\. ]', '_', title)[:100]
             ext = info.get('ext', 'mp4' if not audio_only else 'm4a')
+            
             return direct_url, safe_title, ext
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Không thể tải: {str(e)}")
@@ -131,3 +150,8 @@ async def api_audio(url: str = Query(...)):
         "download_url": direct_url,
         "extension": ext
     }
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "fb-video-api"}
