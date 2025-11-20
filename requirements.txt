@@ -1,4 +1,3 @@
 fastapi
-yt-dlp>=2024.12.23
-requests
+yt-dlp>=2025.11.20
 uvicorn[standard]
