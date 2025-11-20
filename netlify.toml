@@ -4,11 +4,17 @@
   publish = "."
 
 [[redirects]]
+  from = "/api"
+  to = "/.netlify/functions/index"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/index"
   status = 200
+  force = true
 
-[[headers]]
-  for = "/api/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["yt-dlp-wrap"]
