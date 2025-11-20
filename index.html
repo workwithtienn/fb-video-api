@@ -1,19 +1,93 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <meta charset="utf-8">
-  <title>FB/Video Downloader API</title>
-  <style>body{font-family: system-ui; padding: 30px; max-width: 800px; margin: auto; line-height: 1.6;}</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FB • TikTok • YouTube Downloader</title>
+  <style>
+    body {font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background:#f4f4f4; color:#333;}
+    h1 {text-align:center; color:#1877f2;}
+    input, select, button {padding:12px; font-size:16px; margin:10px 0; width:100%; border-radius:8px; border:1px solid #ddd;}
+    button {background:#1877f2; color:white; cursor:pointer; font-weight:bold;}
+    button:hover {background:#1666c1;}
+    button:disabled {background:#999; cursor:not-allowed;}
+    #log {margin-top:20px; padding:15px; background:#222; color:#0f0; border-radius:8px; font-family:monospace; min-height:100px; white-space:pre-wrap;}
+    .options {display:flex; gap:10px;}
+    .options select {flex:1;}
+  </style>
 </head>
 <body>
-  <h1>Facebook • YouTube • TikTok Downloader API</h1>
-  <p><strong>Tải video trực tiếp (click là tải luôn):</strong><br>
-  <code>/api?url=https://fb.com/reel/123&type=video</code></p>
+  <h1>Facebook • YouTube • TikTok Downloader</h1>
+  <p>Nhập link Reel / Video / Shorts rồi chọn loại → Click là tải luôn!</p>
 
-  <p><strong>Tải audio:</strong><br>
-  <code>/api?url=...&type=audio</code></p>
+  <input type="text" id="url" placeholder="Dán link Facebook, YouTube, TikTok vào đây..." />
 
-  <p><strong>JSON link:</strong><br>
-  <code>/api?url=...&type=json_video</code></p>
+  <div class="options">
+    <select id="type">
+      <option value="video">Tải Video (mp4)</option>
+      <option value="audio">Tải Audio (m4a)</option>
+      <option value="json_video">Chỉ lấy link Video (JSON)</option>
+      <option value="json_audio">Chỉ lấy link Audio (JSON)</option>
+    </select>
+    <button id="btn">TẢI NGAY</button>
+  </div>
+
+  <div id="log">Sẵn sàng – đang chờ bạn nhập link...</div>
+
+  <script>
+    const btn = document.getElementById('btn');
+    const urlInput = document.getElementById('url');
+    const typeSelect = document.getElementById('type');
+    const log = document.getElementById('log');
+
+    function addLog(text) {
+      log.textContent += '\n> ' + text;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    btn.addEventListener('click', async () => {
+      const url = urlInput.value.trim();
+      const type = typeSelect.value;
+
+      if (!url) {
+        addLog('Lỗi: Bạn chưa nhập link!');
+        return;
+      }
+
+      addLog('Đang xử lý...');
+      btn.disabled = true;
+      btn.textContent = 'Đang tải...';
+
+      const apiUrl = `/api?url=${encodeURIComponent(url)}&type=${type}`;
+
+      try {
+        if (type.includes('json')) {
+          // JSON API
+          const res = await fetch(apiUrl);
+          const json = await res.json();
+          addLog('Phản hồi từ server: ' + JSON.stringify(json, null, 2));
+          if (json.success && json.download_url) {
+            addLog('Link thành công! Đang mở...');
+            window.open(json.download_url, '_blank');
+          }
+        } else {
+          // Tải trực tiếp video/audio
+          addLog('Đang chuyển hướng tải file...');
+          location.href = apiUrl;
+        }
+      } catch (err) {
+        addLog('Lỗi nghiêm trọng: ' + err.message);
+        addLog('URL gọi: ' + apiUrl);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'TẢI NGAY';
+      }
+    });
+
+    // Cho phép Enter để tải
+    urlInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') btn.click();
+    });
+  </script>
 </body>
 </html>
