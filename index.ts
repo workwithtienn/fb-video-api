@@ -1,14 +1,14 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-export default function (req: VercelRequest, res: VercelResponse) {
-  res.json({
+export default function handler() {
+  return new Response(JSON.stringify({
     status: "ok",
-    message: "Social Media Downloader API v3 - Facebook, YouTube, TikTok",
-    usage: {
-      "Tải video trực tiếp": "/api/download?type=video&url=...",
-      "Tải audio trực tiếp": "/api/download?type=audio&url=...",
-      "JSON API video": "/api/download?type=json_video&url=...",
-      "JSON API audio": "/api/download?type=json_audio&url=..."
+    message: "Facebook • YouTube • TikTok Downloader API",
+    endpoints: {
+      "Tải video (click là tải luôn)": "/api/download?type=video&url=...",
+      "Tải audio (m4a)": "/api/download?type=audio&url=...",
+      "JSON link video": "/api/download?type=json_video&url=...",
+      "JSON link audio": "/api/download?type=json_audio&url=..."
     }
+  }, null, 2), {
+    headers: { "Content-Type": "application/json" }
   });
 }
