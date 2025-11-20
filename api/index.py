@@ -3,14 +3,9 @@ from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
 import re
-import uvicorn  # nếu chạy local
+import requests   # dùng requests đồng bộ cho ổn định trên Vercel
 
-app = FastAPI(
-    title="Social Media Downloader API",
-    description="Tải video/audio từ Facebook, YouTube, TikTok",
-    version="3.1 - Fixed FB Reels + Direct Download"
-)
-
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,106 +15,68 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
-def get_direct_url_and_info(url: str, audio_only: bool = False):
-    base_opts = {
+def get_video_info(url: str, audio_only: bool = False):
+    ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'socket_timeout': 30,
-        'retries': 10,
+        'format': 'bestaudio' if audio_only else 'bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best',
+        'noplaylist': True,
     }
-
-    if audio_only:
-        ydl_opts = {
-            **base_opts,
-            'format': 'bestaudio/best',
-        }
-    else:
-        ydl_opts = {
-            **base_opts,
-            'format': '(bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best)[height>=720]/'
-                      '(bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best)',  # ưu tiên HD, fallback SD
-        }
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=False)
-            
-            # Lấy format tốt nhất có url trực tiếp
-            formats = info.get('formats', [info])
-            best_format = None
-            for f in reversed(formats):  # ưu tiên chất lượng cao trước
-                if f.get('url') and f.get('vcodec') != 'none':  # có video và có url
-                    best_format = f
-                    break
-            if not best_format:
-                # fallback lấy url chính (thường là SD cho FB public)
-                best_format = info
-
-            direct_url = best_format.get('url') or info.get('url')
-            if not direct_url:
-                raise HTTPException(status_code=400, detail="Không tìm thấy link tải (có thể video private hoặc FB chặn)")
-
-            title = info.get('title', 'Video') or 'Video'
-            safe_title = re.sub(r'[^\w\-_\. ]', '_', title)[:150]
-
-            return direct_url, safe_title, best_format.get('ext', 'mp4')
+            direct_url = info['url']
+            title = info.get('title', 'video')
+            title = re.sub(r'[^\w\-_. ]', '_', title)[:120]
+            ext = 'm4a' if audio_only else 'mp4'
+            return direct_url, title, ext
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Lỗi yt-dlp: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Không lấy được link: {str(e)}")
 
+# Endpoint chính - dùng cái này là tải luôn
 @app.get("/")
-async def root():
-    return {
-        "status": "ok",
-        "message": "Social Media Downloader API v3.1 - Hỗ trợ FB, YT, TT",
-        "usage_example": "https://fb-video-api-omega.vercel.app/?url=https://www.facebook.com/reel/123456"
-    }
-
-# Endpoint chung - dễ dùng nhất
-@app.get("/")
-async def download_or_api(url: str = Query(None, description="Link video"), audio: bool = Query(False, alias="audio")):
+async def main(url: str = Query(None), audio: str = "false"):
     if not url:
-        return await root()
-    
-    direct_url, title, ext = get_direct_url_and_info(url, audio_only=audio)
-    
-    filename = f"{title}.{ 'm4a' if audio else 'mp4' }"
+        return {"status": "ok", "message": "Thả link vào ?url=... nhé anh iu"}
 
-    async def stream_content():
-        import aiohttp
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
-            async with session.get(direct_url) as resp:
-                if resp.status != 200:
-                    raise HTTPException(status_code=500, detail="Lỗi stream từ nguồn")
-                async for chunk in resp.content.iter_chunked(1024 * 1024):
+    audio_only = audio.lower() in ("true", "1", "yes")
+
+    try:
+        direct_url, title, ext = get_video_info(url, audio_only)
+    except HTTPException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+
+    # Stream bằng requests (ổn định nhất trên Vercel)
+    def iterfile():
+        with requests.get(direct_url, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=1024*1024):
+                if chunk:
                     yield chunk
 
+    filename = f"{title}.{ext}"
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
-        "Content-Type": "video/mp4" if not audio else "audio/m4a",
-        "Accept-Ranges": "bytes",
+        "Content-Type": "video/mp4" if not audio_only else "audio/m4a",
     }
 
-    return StreamingResponse(stream_content(), headers=headers, media_type="application/octet-stream")
+    return StreamingResponse(iterfile(), headers=headers, media_type="application/octet-stream")
 
-# Giữ lại các endpoint cũ nếu bạn vẫn muốn dùng
+# Giữ lại các endpoint cũ cho tương thích
 @app.get("/download/video")
-async def download_video_old(url: str = Query(..., description="Link video")):
-    return await download_or_api(url=url, audio=False)
+async def old_video(url: str = Query(...)):
+    return await main(url=url, audio="false")
 
 @app.get("/download/audio")
-async def download_audio_old(url: str = Query(..., description="Link audio")):
-    return await download_or_api(url=url, audio=True)
+async def old_audio(url: str = Query(...)):
+    return await main(url=url, audio="true")
 
 @app.get("/api/video")
 async def api_video(url: str = Query(...)):
-    direct_url, title, _ = get_direct_url_and_info(url, audio_only=False)
-    return {"success": True, "title": title, "download_url": direct_url}
+    direct_url, title, _ = get_video_info(url, False)
+    return {"success": True, "title": title, "url": direct_url}
 
 @app.get("/api/audio")
 async def api_audio(url: str = Query(...)):
-    direct_url, title, _ = get_direct_url_and_info(url, audio_only=True)
-    return {"success": True, "title": title, "download_url": direct_url}
-
-# Nếu chạy local
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    direct_url, title, _ = get_video_info(url, True)
+    return {"success": True, "title": title, "url": direct_url}
