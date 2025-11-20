@@ -1,9 +1,14 @@
 [build]
-  publish = "."
+  command = "echo 'No build'"
   functions = "netlify/functions"
+  publish = "."
 
 [[redirects]]
-  from = "/api"
-  to = "/.netlify/functions/api"
+  from = "/api/*"
+  to = "/.netlify/functions/index"
   status = 200
   force = true
+
+[functions]
+  external_node_modules = ["yt-dlp-wrap"]
+  node_bundler = "esbuild"
