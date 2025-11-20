@@ -7,7 +7,13 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "noEmit": false
   },
-  "include": ["api/**/*.ts"]
+  "include": [
+    "netlify/functions/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
